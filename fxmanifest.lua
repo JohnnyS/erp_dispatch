@@ -8,8 +8,9 @@ version '1.0.0'
 lua54 'yes'
 
 client_script '@PolyZone/client.lua'
-server_script 'sv_main.lua'
+server_script {'@oxmysql/lib/MySQL.lua','sv_main.lua'}
 client_script 'cl_main.lua'
+shared_script {'@es_extended/imports.lua'}
 
 ui_page 'ui/index.html'
 
