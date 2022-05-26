@@ -1,9 +1,6 @@
 local callID = 0
-
 -- Hunting
-
 local inHuntingZone = false
-
 local huntingZone = PolyZone:Create({
 	vector2(-1416.86, 2730.74),
 	vector2(-2415.01, 3701.34),
@@ -11,7 +8,7 @@ local huntingZone = PolyZone:Create({
 	vector2(356.86, 4802.33),
     vector2(-292.75, 3766.8),
     vector2(62.85, 3368.78)
-}, {
+ }, {
 	name="huntingZone",
 	minZ=-50.0,
 	maxZ=750.0,
@@ -23,46 +20,45 @@ huntingZone:onPlayerInOut(function(isPointInside, point)
     inHuntingZone = isPointInside
 end)
 
-
-ESX = nil
-
-Citizen.CreateThread(function()
-    while ESX == nil do
-        TriggerEvent('esx:getSharedObject', function(obj) ESX = obj end)
-        Citizen.Wait(0)
-    end
+RegisterNetEvent('esx:playerLoaded')
+AddEventHandler('esx:playerLoaded', function(xPlayer)
+	ESX.PlayerData = xPlayer
+	ESX.PlayerLoaded = true
+    GetPlayerInfo()
 end)
 
+RegisterNetEvent('esx:onPlayerLogout')
+AddEventHandler('esx:onPlayerLogout', function()
+	ESX.PlayerLoaded = false
+	ESX.PlayerData = {}
+end)
 
-CreateThread(function() -- Use this only if you think/plan on restarting the resource often.
-    while PlayerData['cid'] == nil do
-      PlayerData = ESX.GetPlayerData()
-      Wait(5000)
+RegisterNetEvent('esx:setJob')
+AddEventHandler('esx:setJob', function(job)
+   ESX.PlayerData.job = job
+   GetPlayerInfo()
+end)
+firstname, lastname = true
+function GetPlayerInfo()
+	ESX.TriggerServerCallback('rcrp:getCharData', function(chardata)
+        firstname = chardata.firstname
+        lastname = chardata.lastname
+        phone = chardata.phone_number
+        if firstname == nil then Citizen.Wait(1000) end
+        --print(lastname)
+    end)
+end
+
+AddEventHandler('onResourceStart', function(resource)
+    if resource == GetCurrentResourceName() then
+        Wait(1000)
+        GetPlayerInfo()
     end
-    return
 end)
 
 local currentCallSign = ""
 local playerPed, playerCoords = PlayerPedId(), vec3(0, 0, 0)
 local currentVehicle, inVehicle, currentlyArmed, currentWeapon = nil, false, false, `WEAPON_UNARMED`
-
-PlayerData = {}
-
-RegisterNetEvent('echorp:playerSpawned') -- Use this to grab player info on spawn.
-AddEventHandler('echorp:playerSpawned', function(sentData) PlayerData = sentData end)
-
-RegisterNetEvent('echorp:updateinfo')
-AddEventHandler('echorp:updateinfo', function(toChange, targetData) 
-    PlayerData[toChange] = targetData
-end)
-
-RegisterNetEvent('echorp:doLogout') -- Use this to logout.
-AddEventHandler('echorp:doLogout', function(sentData) 
-    PlayerData = {}
-    currentCallSign = ""
-    currentVehicle, inVehicle, currentlyArmed, currentWeapon = nil, false, false, `WEAPON_UNARMED`
-end)
-
 local colors = {
     --[0] = "Metallic Black",
     [1] = "Metallic Graphite Black",
@@ -224,7 +220,6 @@ local colors = {
     [157] = "Epsilon Blue",
     [158] = "Unknown",
 }
-
 local whitelisted = {
     [`WEAPON_STUNGUN`] = true,
     [`WEAPON_SNOWBALL`] = true
@@ -532,16 +527,11 @@ local KnownWeapons = {
 }
 
 CreateThread(function() -- Gun Shots
-
     local isBusyGunShots, armed, cooldownGS, cooldownSMD = false, false, 0, 0
-
     while true do
         Wait(0)
-        
         if not isBusyGunShots then
-
             armed = currentlyArmed
-
             if armed and KnownWeapons[currentWeapon] then
                 if IsPedShooting(playerPed) and ((cooldownGS == 0) or cooldownGS - GetGameTimer() < 0) then
                     isBusyGunShots = true
@@ -571,7 +561,7 @@ CreateThread(function() -- Gun Shots
                     if not inVehicle and not shouldAlert then
                         if math.random(10) > 5 then
                             cooldownSMD = GetGameTimer() + math.random(45000,60000) -- 20 => 25 Seconds.
-                        elseif not PlayerData.job.isPolice then
+                        elseif not ESX.PlayerData.job.name == 'police' then
                             local closestNPC = GetClosestNPC(playerCoords, 25.0, 'armed')
                             if closestNPC and DoesEntityExist(closestNPC) then
                                 cooldownSMD = GetGameTimer() + math.random(60000,90000) -- 20 => 25 Seconds.
@@ -591,15 +581,13 @@ end)
 
 function ArmedPlayer() -- When aiming weapon.
     local locationInfo = GetStreetAndZone()
-    local gender = IsPedMale(playerPed)
+    gender = GetGender()
     local currentPos = GetEntityCoords(playerPed)
-
     local isInVehicle = IsPedInAnyVehicle(PlayerPedId())
-
     local vehicleData = GetVehicleDescription() or {}
-    local initialTenCode = "10-44"
+    local initialTenCode = "10-60"
     
-    Wait(math.random(3000, 5000))
+    Wait(math.random(5000, 7000))
 
     TriggerServerEvent('erp-dispatch:armedperson', currentPos)
 
@@ -619,31 +607,25 @@ function ArmedPlayer() -- When aiming weapon.
         z = currentPos.z
         },
         dispatchMessage = "Brandishing",
-        job = {"police","bcso","pa","sast","sapr","sasp","doc"}
+        job = {"police"}
     })
 
 end
 
 RegisterNetEvent('erp-dispatch:gunshotAlert')
-AddEventHandler('erp-dispatch:gunshotAlert', function(sentCoords, isAuto, isCop)
+AddEventHandler('erp-dispatch:gunshotAlert', function(sentCoords, isAuto)
     if sentCoords then
-        if (PlayerData.job.isPolice) and PlayerData.job.duty == 1 then
-            local blipAlpha = 200
-            local gunshotBlip = AddBlipForRadius(sentCoords, 75.0)
-            SetBlipHighDetail(gunshotBlip, true)
-            if isCop then
-                SetBlipColour(gunshotBlip, 2) -- Green
-            elseif isAuto then
-                SetBlipColour(gunshotBlip, 3) -- Blue
-            else
-                SetBlipColour(gunshotBlip, 1) -- Red
-            end
-
+        if ESX.PlayerData and ESX.PlayerData.job.name == 'police' then
+            local blipAlpha = 300
+            local gunshotBlip = AddBlipForCoord(sentCoords.x, sentCoords.y, sentCoords.z)
+            SetBlipSprite(gunshotBlip,  432)
+            SetBlipColour(gunshotBlip,  1)
+            SetBlipScale(gunshotBlip, 1.5)
+            BeginTextCommandSetBlipName("STRING")
+            AddTextComponentString('10-13 Shots Fired')
+            EndTextCommandSetBlipName(gunshotBlip)
             SetBlipAlpha(gunshotBlip, blipAlpha)
             SetBlipAsShortRange(gunshotBlip, true)
-            BeginTextCommandSetBlipName("STRING")
-			AddTextComponentString('10-60 Shots Fired')
-			EndTextCommandSetBlipName(gunshotBlip)
             PlaySound(-1, "Lose_1st", "GTAO_FM_Events_Soundset", 0, 0, 1)
             
             CreateThread(function()
@@ -651,7 +633,6 @@ AddEventHandler('erp-dispatch:gunshotAlert', function(sentCoords, isAuto, isCop)
                     Citizen.Wait(math.random(20, 30) * 4)
                     blipAlpha = blipAlpha - 1
                     SetBlipAlpha(gunshotBlip, blipAlpha)
-    
                     if blipAlpha == 0 then
                         RemoveBlip(gunshotBlip)
                         return
@@ -666,12 +647,9 @@ end)
 -- FIGHT IN PROGRESS
 
 CreateThread(function() -- Fighting
-
     local isBusy, cooldown = false, 0
-
     while true do 
         Wait(0)
-
         if not inVehicle and not isBusy and (cooldown - GetGameTimer() < 0) then
             local pedinfront = GetPedInFront()
             if pedinfront > 0 then
@@ -693,17 +671,16 @@ end)
 RegisterNetEvent('erp-dispatch:combatAlert')
 AddEventHandler('erp-dispatch:combatAlert', function(sentCoords)
     if sentCoords then
-        if (ESX.GetPlayerData().job.name == 'police') and ESX.GetPlayerData().job.duty == 1 then
+        if (ESX.PlayerData.job.name == 'police') then
             local alpha = 250
             local combatBlip = AddBlipForCoord(sentCoords)
-
             SetBlipScale(combatBlip, 1.3)
 			SetBlipSprite(combatBlip, 437)
 			SetBlipColour(combatBlip, 1)
 			SetBlipAlpha(combatBlip, alpha)
 			SetBlipAsShortRange(combatBlip, true)
 			BeginTextCommandSetBlipName("STRING")              -- set the blip's legend caption
-			AddTextComponentString('10-11 Fight In Progress')              -- to 'supermarket'
+			AddTextComponentString('10-10 Fight In Progress')              -- to 'supermarket'
 			EndTextCommandSetBlipName(combatBlip)
 			SetBlipAsShortRange(combatBlip,  1)
             PlaySound(-1, "Lose_1st", "GTAO_FM_Events_Soundset", 0, 0, 1)
@@ -728,7 +705,6 @@ end)
 RegisterNetEvent('erp-dispatch:armedperson')
 AddEventHandler('erp-dispatch:armedperson', function(sentCoords)
     if sentCoords then
-        
         if (ESX.GetPlayerData().job.name == 'police') and ESX.GetPlayerData().job.duty == 1 then
             local alpha = 250
             local armedperson = AddBlipForCoord(sentCoords)
@@ -739,7 +715,7 @@ AddEventHandler('erp-dispatch:armedperson', function(sentCoords)
 			SetBlipAlpha(armedperson, alpha)
 			SetBlipAsShortRange(armedperson, true)
 			BeginTextCommandSetBlipName("STRING")              -- set the blip's legend caption
-			AddTextComponentString('Armed Person')              -- to 'supermarket'
+			AddTextComponentString('10-60 Armed Person')              -- to 'supermarket'
 			EndTextCommandSetBlipName(armedperson)
 			SetBlipAsShortRange(armedperson,  1)
             --PlaySound(-1, "Lose_1st", "GTAO_FM_Events_Soundset", 0, 0, 1)
@@ -819,11 +795,6 @@ end)
 RegisterNetEvent('civilian:alertPolice')
 AddEventHandler("civilian:alertPolice",function(basedistance,alertType,objPassed,isGunshot,isHunting,sentWeapon)
     if ESX.GetPlayerData().job == nil then return end;
-    if (ESX.GetPlayerData().job.name == 'police') then
-    local isPolice = true
-    else
-    local isPolice = false
-    end
 
     local object = objPassed
 
@@ -1031,12 +1002,11 @@ end)
   
 
 function AlertFight()
-
     local locationInfo = GetStreetAndZone()
-    local gender, armed = IsPedMale(playerPed), IsPedArmed(playerPed, 7)
+    local gender, armed = GetGender(), IsPedArmed(playerPed, 4)
     local currentPos = GetEntityCoords(playerPed)
 
-    local dispatchCode = "10-15"
+    local dispatchCode = "10-10"
 
     if armed then
         --dispatchCode = "something"
@@ -1054,10 +1024,10 @@ function AlertFight()
         y = currentPos.y,
         z = currentPos.z
         },
-        dispatchMessage = "Disturbance",
+        dispatchMessage = "Fight in Progress",
         blipSprite = 458,
         blipColor = 25,
-        job = {"police","bcso","pa","sast","sapr","sasp","doc"}
+        job = {"police"}
     })
 
     TriggerServerEvent('erp-dispatch:combatAlert', currentPos)
@@ -1085,8 +1055,8 @@ function AlertFight()
                     y = newPos.y,
                     z = newPos.z
                     },
-                    dispatchMessage = "Car fleeing 10-15",
-                    job = {"police","bcso","pa","sast","sapr","sasp","doc"}
+                    dispatchMessage = "Car fleeing 10-80",
+                    job = {"police"}
                 })
                 TriggerServerEvent('erp-dispatch:combatAlert', newPos)
             end
@@ -1095,21 +1065,42 @@ function AlertFight()
     end
 end
 
+function GetGender() --CUSTOM
+    local timeout = 1000 * 10
+    local init = GetGameTimer()
+    local gender = nil
+
+    ESX.TriggerServerCallback('esx_skin:getPlayerSkin', function(skin)
+        if skin.sex == 0 then
+            gender = "Male"
+        else
+            gender = 2 --Female
+        end
+    end)
+
+    while GetGameTimer() - init < timeout and not gender do
+        Wait(100)
+    end
+    --print("GetGender function "..gender)
+    return gender
+end
+
 function AlertGunShot(isHunting, sentWeapon) -- Check for automatic, change priority to 1
     if KnownWeapons[sentWeapon] and not IsPedCurrentWeaponSilenced(PlayerPedId()) then
         local locationInfo = GetStreetAndZone()
-        local gender = IsPedMale(playerPed)
+        gender = GetGender()
+        --print("After here")
+        --print(gender)
         local currentPos = GetEntityCoords(playerPed)
-
         local isInVehicle = IsPedInAnyVehicle(PlayerPedId())
-
         local vehicleData = GetVehicleDescription() or {}
-        local initialTenCode = "10-60"
+        local initialTenCode = "10-13"
         local isAuto = KnownWeapons[sentWeapon]['isAuto']
 
-        TriggerServerEvent('erp-dispatch:gunshotAlert', currentPos, isAuto, PlayerData.job.isPolice)
+        TriggerServerEvent('erp-dispatch:gunshotAlert', currentPos, isAuto)
+        --print("Alert GunShot function job= "..ESX.PlayerData.job.name)
 
-        local job = {"police","bcso","pa","sast","sapr","sasp","doc"}
+        local job = {"police"}
         --if isHunting then job = {"sapr"} end
 
         TriggerServerEvent('dispatch:svNotify', {
@@ -1134,7 +1125,7 @@ function AlertGunShot(isHunting, sentWeapon) -- Check for automatic, change prio
 
         if math.random(1, 10) > 3 and not isInVehicle then
             CreateThread(function()
-                Wait(math.random(5000, 10000))
+                Wait(math.random(5000, 7000))
                 if IsPedInAnyVehicle(PlayerPedId()) then
                     local vehicleData = GetVehicleDescription() or {}
                     local newPos = GetEntityCoords(PlayerPedId())
@@ -1166,76 +1157,578 @@ function AlertGunShot(isHunting, sentWeapon) -- Check for automatic, change prio
     end
 end
 
+---- Downed player from Radial Menu ----
+AddEventHandler('rcrp-playerdown', function()
+    AlertDeath()
+end)
+
+function AlertDeath()
+    if ESX.PlayerData and ESX.PlayerData.job.name == 'police' or 'ambulance' then
+        local locationInfo = GetStreetAndZone()
+        gender = GetGender()
+        local currentPos = GetEntityCoords(playerPed)
+        TriggerServerEvent('dispatch:svNotify', {
+            dispatchCode = "10-99",
+            firstStreet = locationInfo,
+            gender = gender,
+            priority = 1,
+            origin = { x = currentPos.x, y = currentPos.y, z = currentPos.z },
+            dispatchMessage = "10-99",
+            name = ESX.PlayerData.job.grade_label..' '..lastname,
+            --number =  phone,
+            job = {"police","ambulance"},
+            information = "URGENT 10-99"
+        })
+    else
+        local locationInfo = GetStreetAndZone()
+        gender = GetGender()
+        local currentPos = GetEntityCoords(playerPed)
+        TriggerServerEvent('dispatch:svNotify', {
+            dispatchCode = "911",
+            firstStreet = locationInfo,
+            gender = gender,
+            priority = 1,
+            origin = { x = currentPos.x, y = currentPos.y, z = currentPos.z },
+            dispatchMessage = "911 Call",
+            --name = firstname..' '..lastname,
+            --number =  phone,
+            job = {"police","ambulance"},
+            information = "Unconscious Person"
+        })
+    end
+end
+--
+--Vangelicos
+RegisterNetEvent('rcrp-dispatch:VangelicosAlarm')
+AddEventHandler("rcrp-dispatch:VangelicosAlarm",function()
+    AlertJewelRob()
+end)
+
+function AlertJewelRob()
+    local locationInfo = GetStreetAndZone()
+    gender = GetGender()
+    local currentPos = GetEntityCoords(playerPed)
+    local dispatchCode = "10-76"
+
+    TriggerServerEvent('rcrp-dispatch:servervangelicos', currentPos)
+    TriggerServerEvent('dispatch:svNotify', {
+        dispatchCode = dispatchCode,
+        firstStreet = locationInfo,
+        gender = gender,
+        priority = 1,
+        origin = {
+            x = currentPos.x,
+            y = currentPos.y,
+            z = currentPos.z
+        },
+        dispatchMessage = "Vangelicos Alarm",
+        job = {"police"}
+    })
+end
+
+RegisterNetEvent('rcrp-dispatch:VangelicosBlip')
+AddEventHandler('rcrp-dispatch:VangelicosBlip', function(targetCoords)
+    if ESX.PlayerData and ESX.PlayerData.job.name == 'police' then	
+		local alpha = 250
+		local truck = AddBlipForCoord(targetCoords.x, targetCoords.y, targetCoords.z)
+		SetBlipSprite(truck,  162)
+		SetBlipColour(truck,  2)
+		SetBlipScale(truck, 1.5)
+		SetBlipAsShortRange(truck,  true)
+		BeginTextCommandSetBlipName("STRING")
+		AddTextComponentString('10-76 Vangelico Robbery In Progress')
+        EndTextCommandSetBlipName(truck)
+        --TriggerEvent("erp-sounds:PlayOnOne","metaldetected",0.1)
+		while alpha ~= 0 do
+			Citizen.Wait(120 * 4)
+			alpha = alpha - 1
+			SetBlipAlpha(truck, alpha)
+
+            if alpha == 0 then
+                RemoveBlip(truck)
+		        return
+            end
+        end
+    end
+end)
+--
+---- Store Robbery ----
+RegisterNetEvent('rcrp-dispatch:StoreRobberyAlarm')
+AddEventHandler("rcrp-dispatch:StoreRobberyAlarm",function(street2, coords)
+    gender = GetGender()
+    local currentPos = GetEntityCoords(playerPed)
+    local dispatchCode = "10-65"
+    TriggerServerEvent('rcrp-dispatch:serverStoreRobberies', currentPos)
+    TriggerServerEvent('dispatch:svNotify', {
+        dispatchCode = dispatchCode,
+        firstStreet = street2,
+        gender = gender,
+        priority = 1,
+        origin = {
+            x = coords.x,
+            y = coords.y,
+            z = coords.z
+        },
+        dispatchMessage = "Store Robbery",
+        job = {"police"}
+    })
+end)
+
+RegisterNetEvent('rcrp-dispatch:StoreRobberiesBlip')
+AddEventHandler('rcrp-dispatch:StoreRobberiesBlip', function(targetCoords)
+    if ESX.PlayerData and ESX.PlayerData.job.name == 'police' then	
+		local alpha = 250
+		local store = AddBlipForCoord(targetCoords.x, targetCoords.y, targetCoords.z)
+		SetBlipSprite(store,  162)
+		SetBlipColour(store,  2)
+		SetBlipScale(store, 1.5)
+		SetBlipAsShortRange(store,  true)
+		BeginTextCommandSetBlipName("STRING")
+		AddTextComponentString('10-65 Store Robbery In Progress')
+        EndTextCommandSetBlipName(store)
+        --TriggerEvent("erp-sounds:PlayOnOne","metaldetected",0.1)
+		while alpha ~= 0 do
+			Citizen.Wait(120 * 4)
+			alpha = alpha - 1
+			SetBlipAlpha(store, alpha)
+
+            if alpha == 0 then
+                RemoveBlip(store)
+		        return
+            end
+        end
+    end
+end)
+--
+---- Bank Robbery ----
+RegisterNetEvent('rcrp-dispatch:bankrobbery')
+AddEventHandler("rcrp-dispatch:bankrobbery",function(coords, street_name, message)
+    local locationInfo = GetStreetAndZone()
+    gender = GetGender()
+    local currentPos = GetEntityCoords(playerPed)
+    local dispatchCode = "10-86"
+
+    TriggerServerEvent('rcrp-dispatch:ServerBankRobbery', currentPos)
+    TriggerServerEvent('dispatch:svNotify', {
+        dispatchCode = dispatchCode,
+        firstStreet = street_name,
+        gender = gender,
+        priority = 1,
+        origin = {
+            x = coords.x,
+            y = coords.y,
+            z = coords.z
+        },
+        dispatchMessage = "Bank Alarm Triggered",
+        job = {"police"}
+    })
+end)
+
+RegisterNetEvent('rcrp-dispatch:BankRobberyBlip')
+AddEventHandler('rcrp-dispatch:BankRobberyBlip', function(targetCoords)
+	if ESX.PlayerData and ESX.PlayerData.job.name == 'police' then		
+		local alpha = 250
+		local bankwobbewy = AddBlipForCoord(targetCoords.x, targetCoords.y, targetCoords.z)
+
+		SetBlipSprite(bankwobbewy,  162)
+		SetBlipColour(bankwobbewy,  2)
+		SetBlipScale(bankwobbewy, 1.5)
+		SetBlipAsShortRange(bankwobbewy,  true)
+		BeginTextCommandSetBlipName("STRING")
+		AddTextComponentString('10-86 Bank Robbery In Progress')
+        EndTextCommandSetBlipName(bankwobbewy)
+        --TriggerEvent("erp-sounds:PlayOnOne","metaldetected",0.1)
+
+		while alpha ~= 0 do
+			Citizen.Wait(120 * 4)
+			alpha = alpha - 1
+			SetBlipAlpha(bankwobbewy, alpha)
+
+		if alpha == 0 then
+			RemoveBlip(bankwobbewy)
+		return
+      end
+    end
+  end
+end)
+--
+---- Car Thief ----
+RegisterNetEvent('rcrp-dispatch:CarThief')
+AddEventHandler("rcrp-dispatch:CarThief",function(streetName)
+   -- print("CarThief Dispatch Alert")
+    local locationInfo = GetStreetAndZone()
+    gender = GetGender()
+    local currentPos = GetEntityCoords(playerPed)
+    local dispatchCode = "10-64"
+
+    TriggerServerEvent('rcrp-dispatch:ChopShopBlip', currentPos)
+    TriggerServerEvent('dispatch:svNotify', {
+        dispatchCode = dispatchCode,
+        firstStreet = streetName,
+        gender = gender,
+        priority = 1,
+        origin = {
+            x = currentPos.x,
+            y = currentPos.y,
+            z = currentPos.z
+        },
+        dispatchMessage = "Car Jacking",
+        job = {"police"}
+    })
+end)
+
+RegisterNetEvent('rcrp-dispatch:ChopShopBlip')
+AddEventHandler('rcrp-dispatch:ChopShopBlip', function(targetCoords)
+	if ESX.PlayerData and ESX.PlayerData.job.name == 'police' then		
+		local alpha = 250
+		local carthief = AddBlipForCoord(targetCoords.x, targetCoords.y, targetCoords.z)
+
+		SetBlipSprite(carthief,  47)
+		SetBlipColour(carthief,  2)
+		SetBlipScale(carthief, 1.2)
+		SetBlipAsShortRange(carthief,  true)
+		BeginTextCommandSetBlipName("STRING")
+		AddTextComponentString('10-64 Suspicious Car Jacking')
+        EndTextCommandSetBlipName(carthief)
+        --TriggerEvent("erp-sounds:PlayOnOne","metaldetected",0.1)
+
+		while alpha ~= 0 do
+			Citizen.Wait(120 * 4)
+			alpha = alpha - 1
+			SetBlipAlpha(carthief, alpha)
+
+		if alpha == 0 then
+			RemoveBlip(carthief)
+		return
+      end
+    end
+  end
+end)
+--
+---- SSDrugs ----
+RegisterNetEvent('rcrp-dispatch:DrugReports')
+AddEventHandler("rcrp-dispatch:DrugReports",function(location)
+    local locationInfo = GetStreetAndZone()
+    gender = GetGender()
+    local currentPos = GetEntityCoords(playerPed)
+    local dispatchCode = "10-39"
+
+    TriggerServerEvent('rcrp-dispatch:DrugReportsBlip', currentPos)
+    TriggerServerEvent('dispatch:svNotify', {
+        dispatchCode = dispatchCode,
+        firstStreet = locationInfo,
+        gender = gender,
+        priority = 1,
+        origin = {
+            x = location.x,
+            y = location.y,
+            z = location.z
+        },
+        dispatchMessage = "Drug Dealer",
+        information = "Someone tried selling me a weird substance",
+        job = {"police"}
+    })
+end)
+
+RegisterNetEvent('rcrp-dispatch:DrugReportBlip')
+AddEventHandler('rcrp-dispatch:DrugReportBlip', function(targetCoords)
+	if ESX.PlayerData and ESX.PlayerData.job.name == 'police' then		
+		local alpha = 250
+		local drugcall = AddBlipForCoord(targetCoords.x, targetCoords.y, targetCoords.z)
+
+		SetBlipSprite(drugcall,  47)
+		SetBlipColour(drugcall,  2)
+		SetBlipScale(drugcall, 1.2)
+		SetBlipAsShortRange(drugcall,  true)
+		BeginTextCommandSetBlipName("STRING")
+		AddTextComponentString('10-39 Drug Call')
+        EndTextCommandSetBlipName(drugcall)
+        --TriggerEvent("erp-sounds:PlayOnOne","metaldetected",0.1)
+
+		while alpha ~= 0 do
+			Citizen.Wait(120 * 4)
+			alpha = alpha - 1
+			SetBlipAlpha(drugcall, alpha)
+
+		if alpha == 0 then
+			RemoveBlip(drugcall)
+		return
+      end
+    end
+  end
+end)
+-- Needs further testing TODO ^
+---- House Robberies ----
+function GetStreetAndZoneHR(pos)
+    local currentStreetHash, intersectStreetHash = GetStreetNameAtCoord(pos.x, pos.y, pos.z)
+    local currentStreetName = GetStreetNameFromHashKey(currentStreetHash)
+    local area = GetLabelText(tostring(GetNameOfZone(pos.x, pos.y, pos.z)))
+    local playerStreetsLocation = area
+    if not zone then zone = "UNKNOWN" end
+    if currentStreetName ~= nil and currentStreetName ~= "" then playerStreetsLocation = currentStreetName .. ", " ..area
+    else playerStreetsLocation = area end
+    return playerStreetsLocation
+end
+
+RegisterNetEvent('rcrp-dispatch:houserobbery')
+AddEventHandler("rcrp-dispatch:houserobbery",function(pos, pedAttacked)
+    local locationInfo = GetStreetAndZoneHR(pos)
+    local dispatchCode = "10-67"
+
+    if pedAttacked then 
+        TriggerServerEvent('rcrp-dispatch:houserobbery', pos)
+        TriggerServerEvent('dispatch:svNotify', {
+            dispatchCode = dispatchCode,
+            firstStreet = locationInfo,
+            priority = 1,
+            origin = {
+                x = pos.x,
+                y = pos.y,
+                z = pos.z
+            },
+            dispatchMessage = "Jack",
+            information = "SOMEONE IS IN MY HOUSE TRYNA STEAL MY SHIT",
+            job = {"police"}
+        })
+    else
+        TriggerServerEvent('rcrp-dispatch:houserobbery', pos)
+        TriggerServerEvent('dispatch:svNotify', {
+            dispatchCode = dispatchCode,
+            firstStreet = locationInfo,
+            priority = 1,
+            origin = {
+                x = pos.x,
+                y = pos.y,
+                z = pos.z
+            },
+            dispatchMessage = "Witness Reports",
+            information = "Witness reports someone is trying to break into a house",
+            job = {"police"}
+        })
+    end
+end)
+
+RegisterNetEvent('rcrp-dispatch:houserobberyblip')
+AddEventHandler('rcrp-dispatch:houserobberyblip', function(targetCoords)
+	if ESX.PlayerData and ESX.PlayerData.job.name == 'police' then		
+		local alpha = 250
+		local housecall = AddBlipForCoord(targetCoords.x, targetCoords.y, targetCoords.z)
+
+		SetBlipSprite(housecall,  47)
+		SetBlipColour(housecall,  2)
+		SetBlipScale(housecall, 1.2)
+		SetBlipAsShortRange(housecall,  true)
+		BeginTextCommandSetBlipName("STRING")
+		AddTextComponentString('10-67 Burglary Report')
+        EndTextCommandSetBlipName(housecall)
+        --TriggerEvent("erp-sounds:PlayOnOne","metaldetected",0.1)
+
+		while alpha ~= 0 do
+			Citizen.Wait(120 * 4)
+			alpha = alpha - 1
+			SetBlipAlpha(housecall, alpha)
+
+		if alpha == 0 then
+			RemoveBlip(housecall)
+		return
+      end
+    end
+  end
+end)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+RegisterNetEvent('dispatch:clNotify')
+AddEventHandler('dispatch:clNotify', function(sNotificationData, sNotificationId, sender)
+  --print(ESX.DumpTable(sNotificationData))
+  if ESX.GetPlayerData().job.name == 'police' then
+  local ispolice = true
+  else
+  local ispolice = false
+  end
+  if sNotificationData ~= nil then
+    if sender == GetPlayerServerId(PlayerId()) and sNotificationData['dispatchCode'] == '911' then
+        SendNUIMessage({
+            update = "newCall",
+            callID = sNotificationId + math.random(1000, 9999),
+            data = {
+                dispatchCode = '911',
+                priority = 1,
+                dispatchMessage = "Sent 911 call",
+                information = "Thank you for sending a 911 call in, it has been received and is being processed."
+            },
+            timer = 5000,
+            isPolice = true
+        })
+    elseif sender == GetPlayerServerId(PlayerId()) and sNotificationData['dispatchCode'] == '311' then
+        SendNUIMessage({
+            update = "newCall",
+            callID = sNotificationId + math.random(1000, 9999),
+            data = {
+                dispatchCode = '311',
+                priority = 2,
+                dispatchMessage = "Sent 311 call",
+                information = "Thank you for sending a 311 call in, it has been received and is being processed."
+            },
+            timer = 5000,
+            isPolice = true
+        })
+    end
+    --if PlayerData.job.duty == 0 then return end;
+    local shouldAlert = false
+    for i=1, #sNotificationData['job'] do
+        if sNotificationData['job'][i] == ESX.GetPlayerData().job.name then
+            shouldAlert = true
+            break
+        end
+    end
+    if shouldAlert then 
+        if not disableNotis then
+          if sNotificationData.origin ~= nil then
+            if sNotificationData.originStatic == nil or not sNotificationData.originStatic then
+                sNotificationData.origin = randomizeBlipLocation(sNotificationData.origin)
+                else
+                  sNotificationData.origin = sNotificationData.origin
+                end
+            end
+            SendNUIMessage({
+                update = "newCall",
+                callID = sNotificationId,
+                data = sNotificationData,
+                timer = 8000,
+                isPolice = ispolice
+            })
+        end
+      end
+    end
+end)
+
+RegisterNetEvent('erp-dispatch:setBlip')
+AddEventHandler('erp-dispatch:setBlip', function(type, pos, id)
+    if ESX.PlayerData and ESX.PlayerData.job.name == 'ambulance' or 'police' then 	
+        PlaySoundFrontend(-1, "SELECT", "HUD_FRONTEND_DEFAULT_SOUNDSET", false)
+        PlaySoundFrontend(-1, "Event_Start_Text", "GTAO_FM_Events_Soundset", 0)
+        
+        if type == '10-99' then
+            local alpha = 250
+            local call = AddBlipForCoord(pos)
+
+            SetBlipSprite (call, 480)
+            SetBlipDisplay(call, 4)
+            SetBlipScale  (call, 1.2)
+            SetBlipAsShortRange(call, true)
+            SetBlipAlpha(call, alpha)
+            SetBlipHighDetail(call, true)
+            SetBlipAsShortRange(call, true)
+
+            SetBlipColour (call, 1)
+            BeginTextCommandSetBlipName('STRING')
+            AddTextComponentString('['..id..'] 10-99')
+            EndTextCommandSetBlipName(call)
+            
+        
+            while alpha ~= 0 do
+                Citizen.Wait(240 * 4)
+                alpha = alpha - 1
+                SetBlipAlpha(call, alpha)
+
+                if alpha == 0 then
+                    RemoveBlip(call)
+                    return
+                end
+            end
+        elseif type == '911' then
+            local alpha = 250
+            local call = AddBlipForCoord(pos)
+
+            SetBlipSprite (call, 480)
+            SetBlipDisplay(call, 4)
+            SetBlipScale  (call, 1.2)
+            SetBlipAsShortRange(call, true)
+            SetBlipAlpha(call, alpha)
+            SetBlipHighDetail(call, true)
+            SetBlipAsShortRange(call, true)
+
+            SetBlipColour (call, 1)
+            BeginTextCommandSetBlipName('STRING')
+            AddTextComponentString('['..id..'] 911 Call')
+            EndTextCommandSetBlipName(call)
+            
+        
+            while alpha ~= 0 do
+                Citizen.Wait(240 * 4)
+                alpha = alpha - 1
+                SetBlipAlpha(call, alpha)
+
+                if alpha == 0 then
+                    RemoveBlip(call)
+                    return
+                end
+            end
+        elseif type == '311' then
+            local alpha = 250
+            local call = AddBlipForCoord(pos)
+
+            SetBlipSprite (call, 480)
+            SetBlipDisplay(call, 4)
+            SetBlipScale  (call, 1.2)
+            SetBlipAsShortRange(call, true)
+            SetBlipAlpha(call, alpha)
+            SetBlipHighDetail(call, true)
+            SetBlipAsShortRange(call, true)
+
+            SetBlipColour (call, 64)
+            BeginTextCommandSetBlipName('STRING')
+            AddTextComponentString('['..id..'] 311 Call')
+            EndTextCommandSetBlipName(call)
+
+            while alpha ~= 0 do
+                Citizen.Wait(240 * 4)
+                alpha = alpha - 1
+                SetBlipAlpha(call, alpha)
+
+                if alpha == 0 then
+                    RemoveBlip(call)
+                    return
+                end
+            end
+        end
+    end
+end)
+
+
+
+
+
+----------------------------------------------------------------------------------
+
 RegisterNetEvent('drugsalecallpolice')
 AddEventHandler("drugsalecallpolice",function()
     DrugSale()
 end)
 
-RegisterCommand('911', function(source, args, rawCommand)
-    local msg = rawCommand:sub(5)
-    if string.len(msg) > 0 then
-        local plyData = ESX.GetPlayerData()
-        local locationInfo = GetStreetAndZone()
-        local gender = IsPedMale(playerPed)
-        local currentPos = GetEntityCoords(playerPed)
-
-        TriggerEvent('dp:playEmote', "phone")
-		local rfl = 100
-        TriggerEvent('dp:cancelEmote')
-        if rfl == 100 then
-            TriggerServerEvent('dispatch:svNotify', {
-                dispatchCode = "911",
-                firstStreet = locationInfo,
-                gender = gender,
-                priority = 1,
-                origin = { x = currentPos.x, y = currentPos.y, z = currentPos.z },
-                dispatchMessage = "911 Call",
-                name = plyData['firstname']..' '..plyData['lastname'],
-                number =  plyData['phone_number'],
-                job = {"police","bcso","pa","sast","sapr","sasp","doc","ambulance", "cmmc"},
-                information = msg
-            })
-        end
-    else
-        exports['erp_notifications']:SendAlert('inform', 'Please put a reason after the 911')
-    end
-end)
-
-RegisterCommand('311', function(source, args, rawCommand)
-    local msg = rawCommand:sub(5)
-    if string.len(msg) > 0 then
-        local plyData = ESX.GetPlayerData()
-        local locationInfo = GetStreetAndZone()
-        local gender = IsPedMale(playerPed)
-        local currentPos = GetEntityCoords(playerPed)
-		print(ESX.DumpTable(ESX.GetPlayerData()))
-
-        TriggerEvent('dp:playEmote', "phone")
-		local rfl = 100
-        TriggerEvent('dp:cancelEmote')
-        if rfl == 100 then
-            TriggerServerEvent('dispatch:svNotify', {
-                dispatchCode = "311",
-                firstStreet = locationInfo,
-                gender = gender,
-                priority = 2,
-                origin = { x = currentPos.x, y = currentPos.y, z = currentPos.z },
-                dispatchMessage = "311 Call",
-                name = plyData['firstName']..' '..plyData['lastName'],
-                number =  plyData['phone_number'],
-                job = {"police","bcso","pa","sast","sapr","sasp","doc","ambulance", "cmmc"},
-                information = msg
-            })
-        end
-    else
-        exports['erp_notifications']:SendAlert('inform', 'Please put a reason after the 311')
-    end
-end)
-
-
 function DrugSale()
     local locationInfo = GetStreetAndZone()
-    local gender = IsPedMale(playerPed)
+    gender = GetGender()
     local currentPos = GetEntityCoords(playerPed)
 
     local isInVehicle = IsPedInAnyVehicle(PlayerPedId())
@@ -1254,7 +1747,7 @@ function DrugSale()
             z = currentPos.z
         },
         dispatchMessage = "Suspicious Hand-off",
-        job = {"police","bcso","pa","sast","sapr","sasp","doc"}
+        job = {"police"}
     })
 
     if math.random(10) > 5 and not isInVehicle then
@@ -1290,9 +1783,9 @@ function DrugSale()
     end
 end
 
-function CarCrash()
+function CarCrash() --Dont believe this will get triggered by anything on our server
     local locationInfo = GetStreetAndZone()
-    local gender = IsPedMale(playerPed)
+    gender = GetGender()
     local currentPos = GetEntityCoords(playerPed)
     local isInVehicle = IsPedInAnyVehicle(PlayerPedId())
     local currentVeh = GetVehiclePedIsIn(PlayerPedId(), false)
@@ -1324,7 +1817,7 @@ end
 function AlertCheckLockpick(object)
 
     local locationInfo = GetStreetAndZone()
-    local gender = IsPedMale(playerPed)
+    gender = GetGender()
     local currentPos = GetEntityCoords(playerPed)
 
     local isInVehicle = IsPedInAnyVehicle(PlayerPedId())
@@ -1355,10 +1848,9 @@ function AlertCheckLockpick(object)
     })
 end
 
-
 function AlertpersonRobbed()
     local locationInfo = GetStreetAndZone()
-    local gender = IsPedMale(playerPed)
+    gender = GetGender()
     local currentPos = GetEntityCoords(playerPed)
     local isInVehicle = IsPedInAnyVehicle(PlayerPedId())
     local currentVeh = GetVehiclePedIsIn(PlayerPedId(), false)
@@ -1414,73 +1906,11 @@ function AlertpersonRobbed()
     end 
 end
 
-RegisterNetEvent('erp-dispatch:houserobbery:force')
-AddEventHandler("erp-dispatch:houserobbery:force",function()
-    AlertCheckRobbery2()
-end)
 
-function AlertCheckRobbery2()
-    local locationInfo = GetStreetAndZone()
-    local gender = IsPedMale(playerPed)
-    local currentPos = GetEntityCoords(playerPed)
-    local isInVehicle = IsPedInAnyVehicle(PlayerPedId())
-    local currentVeh = GetVehiclePedIsIn(PlayerPedId(), false)
-    local dispatchCode = "10-33"
-
-    TriggerServerEvent('erp-dispatch:houserobbery', currentPos)
-
-    TriggerServerEvent('dispatch:svNotify', {
-        dispatchCode = dispatchCode,
-        firstStreet = locationInfo,
-        gender = gender,
-        
-        priority = 2,
-        origin = {
-            x = currentPos.x,
-            y = currentPos.y,
-            z = currentPos.z
-        },
-        dispatchMessage = "Breaking and entering",
-        job = {"police","bcso","pa","sast","sapr","sasp","doc"}
-    })
-
-    if math.random(10) > 3 and not isInVehicle then
-        CreateThread(function()
-            Wait(math.random(12500, 15000))
-            if IsPedInAnyVehicle(PlayerPedId()) then
-                local vehicleData = GetVehicleDescription() or {}
-                local newPos = GetEntityCoords(PlayerPedId())
-                local locationInfo = GetStreetAndZone()
-                TriggerServerEvent('dispatch:svNotify', {
-                    dispatchCode = 'CarEvading',
-                    relatedCode = dispatchCode,
-                    firstStreet = locationInfo,
-                    gender = gender,
-                    model = vehicleData.model,
-                    plate = vehicleData.plate,
-                    
-                    priority = 1,
-                    firstColor = vehicleData.firstColor,
-                    secondColor = vehicleData.secondColor,
-                    heading = vehicleData.heading,
-                    origin = {
-                    x = newPos.x,
-                    y = newPos.y,
-                    z = newPos.z
-                    },
-                    dispatchMessage = "Car fleeing 10-90",
-                    job = {"police","bcso","pa","sast","sapr","sasp","doc"}
-                })
-                TriggerServerEvent('erp-dispatch:houserobbery', newPos)
-            end
-            return
-        end)
-    end
-end
 
 function AlertBankTruck()
     local locationInfo = GetStreetAndZone()
-    local gender = IsPedMale(playerPed)
+    gender = GetGender()
     local currentPos = GetEntityCoords(playerPed)
     local isInVehicle = IsPedInAnyVehicle(PlayerPedId())
     local currentVeh = GetVehiclePedIsIn(PlayerPedId(), false)
@@ -1539,7 +1969,7 @@ end
 
 function AlertArt()
     local locationInfo = GetStreetAndZone()
-    local gender = IsPedMale(playerPed)
+    gender = GetGender()
     local currentPos = GetEntityCoords(playerPed)
     local isInVehicle = IsPedInAnyVehicle(PlayerPedId())
     local currentVeh = GetVehiclePedIsIn(PlayerPedId(), false)
@@ -1598,7 +2028,7 @@ end
 
 function AlertG6()
     local locationInfo = GetStreetAndZone()
-    local gender = IsPedMale(playerPed)
+    gender = GetGender()
     local currentPos = GetEntityCoords(playerPed)
     local isInVehicle = IsPedInAnyVehicle(PlayerPedId())
     local currentVeh = GetVehiclePedIsIn(PlayerPedId(), false)
@@ -1622,68 +2052,12 @@ function AlertG6()
     })
 end
 
-function AlertJewelRob()
-    local locationInfo = GetStreetAndZone()
-    local gender = IsPedMale(playerPed)
-    local currentPos = GetEntityCoords(playerPed)
-    local isInVehicle = IsPedInAnyVehicle(PlayerPedId())
-    local currentVeh = GetVehiclePedIsIn(PlayerPedId(), false)
-    local dispatchCode = "10-90"
 
-    TriggerServerEvent('erp-dispatch:jewel', currentPos)
 
-    TriggerServerEvent('dispatch:svNotify', {
-        dispatchCode = dispatchCode,
-        firstStreet = locationInfo,
-        gender = gender,
-        
-        priority = 1,
-        origin = {
-            x = currentPos.x,
-            y = currentPos.y,
-            z = currentPos.z
-        },
-        dispatchMessage = "Vangelico Robbery",
-        job = {"police","bcso","pa","sast","sapr","sasp","doc"}
-    })
-
-    if math.random(10) > 2 and not isInVehicle then
-        CreateThread(function()
-            Wait(math.random(12500, 15000))
-            if IsPedInAnyVehicle(PlayerPedId()) then
-                local vehicleData = GetVehicleDescription() or {}
-                local newPos = GetEntityCoords(PlayerPedId())
-                local locationInfo = GetStreetAndZone()
-                TriggerServerEvent('dispatch:svNotify', {
-                    dispatchCode = 'CarEvading',
-                    relatedCode = dispatchCode,
-                    firstStreet = locationInfo,
-                    gender = gender,
-                    model = vehicleData.model,
-                    plate = vehicleData.plate,
-                    
-                    priority = 1,
-                    firstColor = vehicleData.firstColor,
-                    secondColor = vehicleData.secondColor,
-                    heading = vehicleData.heading,
-                    origin = {
-                        x = newPos.x,
-                        y = newPos.y,
-                        z = newPos.z
-                    },
-                    dispatchMessage = "Evading 10-90",
-                    job = {"police","bcso","pa","sast","sapr","sasp","doc"}
-                })
-                TriggerServerEvent('erp-dispatch:jewel', newPos)
-            end
-            return
-        end)
-    end
-end
 
 function AlertJailBreak()
     local locationInfo = GetStreetAndZone()
-    local gender = IsPedMale(playerPed)
+    gender = GetGender()
     local currentPos = GetEntityCoords(playerPed)
     local isInVehicle = IsPedInAnyVehicle(PlayerPedId())
     local dispatchCode = "10-98"
@@ -1743,7 +2117,7 @@ end
 
 function AlertPaletoRobbery()
     local locationInfo = GetStreetAndZone()
-    local gender = IsPedMale(playerPed)
+    gender = GetGender()
     local currentPos = GetEntityCoords(playerPed)
     local isInVehicle = IsPedInAnyVehicle(PlayerPedId())
     local dispatchCode = "10-90"
@@ -1801,7 +2175,7 @@ end
 
 function AlertCarBoost(boosted)
     local locationInfo = GetStreetAndZone()
-    local gender = IsPedMale(playerPed)
+    gender = GetGender()
     local currentPos = GetEntityCoords(playerPed)
     local isInVehicle = IsPedInAnyVehicle(PlayerPedId())
     local veh = NetworkGetEntityFromNetworkId(boosted)
@@ -1842,74 +2216,14 @@ function AlertCarBoost(boosted)
     end)
 end
 
-function AlertFleecaRobbery()
-    local locationInfo = GetStreetAndZone()
-    local gender = IsPedMale(playerPed)
-    local currentPos = GetEntityCoords(playerPed)
-    local isInVehicle = IsPedInAnyVehicle(PlayerPedId())
-    local currentVeh = GetVehiclePedIsIn(PlayerPedId(), false)
-    local dispatchCode = "10-90"
 
-    TriggerServerEvent('erp-dispatch:bankwobbewy', currentPos)
-
-    TriggerServerEvent('dispatch:svNotify', {
-        dispatchCode = dispatchCode,
-        firstStreet = locationInfo,
-        gender = gender,
-        
-        priority = 1,
-        origin = {
-            x = currentPos.x,
-            y = currentPos.y,
-            z = currentPos.z
-        },
-        dispatchMessage = "Fleeca Robbery",
-        job = {"police","bcso","pa","sast","sapr","sasp","doc"}
-    })
-
-    if math.random(10) > 2 and not isInVehicle then
-        CreateThread(function()
-            Wait(math.random(17500, 25000))
-            if IsPedInAnyVehicle(PlayerPedId()) then
-                local vehicleData = GetVehicleDescription() or {}
-                local newPos = GetEntityCoords(PlayerPedId())
-                local locationInfo = GetStreetAndZone()
-                TriggerServerEvent('dispatch:svNotify', {
-                    dispatchCode = 'CarEvading',
-                    relatedCode = dispatchCode,
-                    firstStreet = locationInfo,
-                    gender = gender,
-                    model = vehicleData.model,
-                    plate = vehicleData.plate,
-                    
-                    priority = 1,
-                    firstColor = vehicleData.firstColor,
-                    secondColor = vehicleData.secondColor,
-                    heading = vehicleData.heading,
-                    origin = {
-                        x = newPos.x,
-                        y = newPos.y,
-                        z = newPos.z
-                    },
-                    dispatchMessage = "Evading 10-90",
-                    job = {"police","bcso","pa","sast","sapr","sasp","doc"}
-                })
-                TriggerServerEvent('erp-dispatch:bankwobbewy', newPos)
-            end
-            return
-        end)
-    end
-end
 
 RegisterNetEvent('erp-dispatch:drugjob')
 AddEventHandler("erp-dispatch:drugjob",function()
   AlertDrugJob()
 end)
 
-RegisterNetEvent('erp-dispatch:bankrobbery')
-AddEventHandler("erp-dispatch:bankrobbery",function()
-  AlertFleecaRobbery()
-end)
+
 
 RegisterNetEvent('erp-dispatch:paleto:bankrobbery')
 AddEventHandler("erp-dispatch:paleto:bankrobbery",function()
@@ -1928,7 +2242,7 @@ end)
 
 function AlertPacificRobbery()
     local locationInfo = GetStreetAndZone()
-    local gender = IsPedMale(playerPed)
+    gender = GetGender()
     local currentPos = GetEntityCoords(playerPed)
     local isInVehicle = IsPedInAnyVehicle(PlayerPedId())
     local currentVeh = GetVehiclePedIsIn(PlayerPedId(), false)
@@ -1985,7 +2299,7 @@ end
 
 function AlertPowerplant()
     local locationInfo = GetStreetAndZone()
-    local gender = IsPedMale(playerPed)
+    gender = GetGender()
     local currentPos = GetEntityCoords(playerPed)
     local isInVehicle = IsPedInAnyVehicle(PlayerPedId())
     local currentVeh = GetVehiclePedIsIn(PlayerPedId(), false)
@@ -2045,10 +2359,6 @@ AddEventHandler("erp-dispatch:jailbreak",function()
   AlertJailBreak()
 end)
 
-RegisterNetEvent('client:erp-dispatch:jewelrobbery')
-AddEventHandler("client:erp-dispatch:jewelrobbery",function()
-  AlertJewelRob()
-end)
 
 RegisterNetEvent('erp-dispatch:storerobbery')
 AddEventHandler("erp-dispatch:storerobbery",function()
@@ -2264,37 +2574,7 @@ AddEventHandler('erp-dispatch:vehicletheft', function(targetCoords)
   end
 end)
 
----- Store Robbery ----
 
-RegisterNetEvent('erp-dispatch:storerobbery')
-AddEventHandler('erp-dispatch:storerobbery', function(targetCoords)
-    
-    if (PlayerData.job.isPolice) and PlayerData.job.duty == 1 then	
-		local alpha = 250
-		local store = AddBlipForCoord(targetCoords.x, targetCoords.y, targetCoords.z)
-
-		SetBlipHighDetail(store, true)
-		SetBlipSprite(store,  52)
-		SetBlipColour(store,  1)
-		SetBlipScale(store, 1.3)
-		SetBlipAsShortRange(store,  1)
-		BeginTextCommandSetBlipName("STRING")
-		AddTextComponentString('10-90 Robbery In Progress')
-        EndTextCommandSetBlipName(store)
-        TriggerEvent("erp-sounds:PlayOnOne","metaldetected",0.1)
-
-		while alpha ~= 0 do
-			Citizen.Wait(120 * 4)
-			alpha = alpha - 1
-			SetBlipAlpha(store, alpha)
-
-		if alpha == 0 then
-			RemoveBlip(store)
-		return
-      end
-    end
-  end
-end)
 
 ---- House Robbery ----
 
@@ -2388,62 +2668,7 @@ AddEventHandler('erp-dispatch:art', function(targetCoords)
   end
 end)
 
-RegisterNetEvent('erp-dispatch:jewel')
-AddEventHandler('erp-dispatch:jewel', function(targetCoords)
-    
-	if (PlayerData.job.isPolice) and PlayerData.job.duty == 1 then	
-		local alpha = 250
-		local truck = AddBlipForCoord(targetCoords.x, targetCoords.y, targetCoords.z)
 
-		SetBlipSprite(truck,  434)
-		SetBlipColour(truck,  66)
-		SetBlipScale(truck, 1.5)
-		SetBlipAsShortRange(Blip,  1)
-		BeginTextCommandSetBlipName("STRING")
-		AddTextComponentString('10-90 Vangelico Robbery In Progress')
-        EndTextCommandSetBlipName(truck)
-        TriggerEvent("erp-sounds:PlayOnOne","metaldetected",0.1)
-
-		while alpha ~= 0 do
-			Citizen.Wait(120 * 4)
-			alpha = alpha - 1
-			SetBlipAlpha(truck, alpha)
-
-		if alpha == 0 then
-			RemoveBlip(truck)
-		return
-      end
-    end
-  end
-end)
-
-RegisterNetEvent('erp-dispatch:bankwobbewy')
-AddEventHandler('erp-dispatch:bankwobbewy', function(targetCoords)
-	if (PlayerData.job.isPolice) and PlayerData.job.duty == 1 then	
-		local alpha = 250
-		local bankwobbewy = AddBlipForCoord(targetCoords.x, targetCoords.y, targetCoords.z)
-
-		SetBlipSprite(bankwobbewy,  161)
-		SetBlipColour(bankwobbewy,  46)
-		SetBlipScale(bankwobbewy, 1.5)
-		SetBlipAsShortRange(Blip,  1)
-		BeginTextCommandSetBlipName("STRING")
-		AddTextComponentString('10-90 Bank Robbery In Progress')
-        EndTextCommandSetBlipName(bankwobbewy)
-        TriggerEvent("erp-sounds:PlayOnOne","metaldetected",0.1)
-
-		while alpha ~= 0 do
-			Citizen.Wait(120 * 4)
-			alpha = alpha - 1
-			SetBlipAlpha(bankwobbewy, alpha)
-
-		if alpha == 0 then
-			RemoveBlip(bankwobbewy)
-		return
-      end
-    end
-  end
-end)
 
 RegisterNetEvent('erp-dispatch:g6')
 AddEventHandler('erp-dispatch:g6', function(targetCoords)
@@ -2610,148 +2835,16 @@ AddEventHandler('dispatch:getCallResponse', function(message)
     })
 end)
 
-RegisterNetEvent('dispatch:clNotify')
-AddEventHandler('dispatch:clNotify', function(sNotificationData, sNotificationId, sender)
-  print(ESX.DumpTable(sNotificationData))
-  if ESX.GetPlayerData().job.name == 'police' then
-  local ispolice = true
-  else
-  local ispolice = false
-  end
-  if sNotificationData ~= nil then
-    if sender == GetPlayerServerId(PlayerId()) and sNotificationData['dispatchCode'] == '911' then
-        SendNUIMessage({
-            update = "newCall",
-            callID = sNotificationId + math.random(1000, 9999),
-            data = {
-                dispatchCode = '911',
-                priority = 1,
-                dispatchMessage = "Sent 911 call",
-                information = "Thank you for sending a 911 call in, it has been received and is being processed."
-            },
-            timer = 5000,
-            isPolice = true
-        })
-    elseif sender == GetPlayerServerId(PlayerId()) and sNotificationData['dispatchCode'] == '311' then
-        SendNUIMessage({
-            update = "newCall",
-            callID = sNotificationId + math.random(1000, 9999),
-            data = {
-                dispatchCode = '311',
-                priority = 2,
-                dispatchMessage = "Sent 311 call",
-                information = "Thank you for sending a 311 call in, it has been received and is being processed."
-            },
-            timer = 5000,
-            isPolice = true
-        })
-    end
-    if PlayerData.job.duty == 0 then return end;
-    local shouldAlert = false
-    for i=1, #sNotificationData['job'] do
-        if sNotificationData['job'][i] == ESX.GetPlayerData().job.name then
-            shouldAlert = true
-            break
-        end
-    end
-    if shouldAlert then 
-        if not disableNotis then
-          if sNotificationData.origin ~= nil then
-            if sNotificationData.originStatic == nil or not sNotificationData.originStatic then
-                sNotificationData.origin = randomizeBlipLocation(sNotificationData.origin)
-                else
-                  sNotificationData.origin = sNotificationData.origin
-                end
-            end
-            SendNUIMessage({
-                update = "newCall",
-                callID = sNotificationId,
-                data = sNotificationData,
-                timer = 5000,
-                isPolice = ispolice
-            })
-        end
-      end
-    end
-end)
 
-RegisterNetEvent('erp-dispatch:setBlip')
-AddEventHandler('erp-dispatch:setBlip', function(type, pos, id)
-    if (PlayerData.job.isPolice or PlayerData.job.name == 'ambulance' or PlayerData.job.name == 'cmmc') and PlayerData.job.duty == 1 then	
-        PlaySoundFrontend(-1, "SELECT", "HUD_FRONTEND_DEFAULT_SOUNDSET", false)
-        PlaySoundFrontend(-1, "Event_Start_Text", "GTAO_FM_Events_Soundset", 0)
-            
-        if type == '911' then
-            local alpha = 250
-            local call = AddBlipForCoord(pos)
-
-            SetBlipSprite (call, 480)
-            SetBlipDisplay(call, 4)
-            SetBlipScale  (call, 1.2)
-            SetBlipAsShortRange(call, true)
-            SetBlipAlpha(call, alpha)
-            SetBlipHighDetail(call, true)
-            SetBlipAsShortRange(call, true)
-
-            SetBlipColour (call, 1)
-            BeginTextCommandSetBlipName('STRING')
-            AddTextComponentString('['..id..'] 911 Call')
-            EndTextCommandSetBlipName(call)
-            
-        
-            while alpha ~= 0 do
-                Citizen.Wait(240 * 4)
-                alpha = alpha - 1
-                SetBlipAlpha(call, alpha)
-
-                if alpha == 0 then
-                    RemoveBlip(call)
-                    return
-                end
-            end
-        elseif type == '311' then
-            local alpha = 250
-            local call = AddBlipForCoord(pos)
-
-            SetBlipSprite (call, 480)
-            SetBlipDisplay(call, 4)
-            SetBlipScale  (call, 1.2)
-            SetBlipAsShortRange(call, true)
-            SetBlipAlpha(call, alpha)
-            SetBlipHighDetail(call, true)
-            SetBlipAsShortRange(call, true)
-
-            SetBlipColour (call, 64)
-            BeginTextCommandSetBlipName('STRING')
-            AddTextComponentString('['..id..'] 311 Call')
-            EndTextCommandSetBlipName(call)
-
-            while alpha ~= 0 do
-                Citizen.Wait(240 * 4)
-                alpha = alpha - 1
-                SetBlipAlpha(call, alpha)
-
-                if alpha == 0 then
-                    RemoveBlip(call)
-                    return
-                end
-            end
-        end
-    end
-end)
 
 -- EMS 10-14
 
 RegisterNetEvent('ems:tenThirteenA')
 AddEventHandler('ems:tenThirteenA', function()
     if tenThirteenAC then return end;
-    
-    if PlayerData.job.name == 'ambulance' then	
-       
+    if PlayerData.job.name == 'ambulance' then	  
         local pos = GetEntityCoords(PlayerPedId(),  true)
         local plyData = ESX.GetPlayerData()
-
-
         local job = {"police","bcso","pa","sast","sapr","sasp","doc","ambulance", "cmmc"}
 
 		TriggerServerEvent("dispatch:svNotify", {
@@ -2786,7 +2879,6 @@ AddEventHandler('erp-dispatch:emsalertA', function(targetCoords)
     if (PlayerData.job.name == 'ambulance' or PlayerData.job.isPolice) and PlayerData.job.duty == 1 then	
 		local alpha = 250
 		local policedown = AddBlipForCoord(targetCoords.x, targetCoords.y, targetCoords.z)
-
 		SetBlipSprite(policedown,  126)
 		SetBlipColour(policedown,  3)
 		SetBlipScale(policedown, 1.3)
@@ -2811,11 +2903,9 @@ end)
 
 RegisterNetEvent('ems:tenThirteenB')
 AddEventHandler('ems:tenThirteenB', function()
-    if tenThirteenBC then return end;
-    
+    if tenThirteenBC then return end; 
     if PlayerData.job.name == 'ambulance' then	
-        local pos = GetEntityCoords(PlayerPedId(),  true)
-        
+        local pos = GetEntityCoords(PlayerPedId(),  true)    
         local plyData = ESX.GetPlayerData()
 
 		TriggerServerEvent("dispatch:svNotify", {
