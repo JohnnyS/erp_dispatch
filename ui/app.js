@@ -90,7 +90,7 @@ function addNewCall(callID, timer, info, isPolice) {
 
     if (info['gender']) {
         let gender = "Male"
-        if (info['gender'] == 0 || info['gender'] == 2) { gender = "Female" }
+        if (info['gender'] == 2) { gender = "Female" }
         DispatchItem += `<div class="call-bottom-info"><span class="fas fa-genderless"></span>${gender}</div>`
     }
 
@@ -126,12 +126,12 @@ function addNewCall(callID, timer, info, isPolice) {
 
     $(".dispatch-holder").prepend(DispatchItem)
 
-    var timer = 4000
+    var timer = 8000
 
     if (prio == 1) {
-        timer = 12000
+        timer = 15000
     } else if (prio == 2) {
-        timer = 9000
+        timer = 10000
     }
 
     $(`.${callID}`).addClass("animate__backInRight");
