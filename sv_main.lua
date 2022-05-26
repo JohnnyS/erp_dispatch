@@ -1,9 +1,5 @@
 local calls = {}
 
-ESX = nil
-
-TriggerEvent('esx:getSharedObject', function(obj) ESX = obj end)
-
 function GetDispatchCalls() return calls end
 exports('GetDispatchCalls', GetDispatchCalls) -- exports['erp_dispatch']:GetDispatchCalls()
 
@@ -17,7 +13,8 @@ AddEventHandler("dispatch:svNotify", function(data)
     calls[newId]['responses'] = {}
     calls[newId]['time'] = os.time() * 1000
     TriggerClientEvent('dispatch:clNotify', -1, data, newId, source)
-    if data['dispatchCode'] == '911' or data['dispatchCode'] == '311' then
+    --print(json.encode(data))
+    if data['dispatchCode'] == '911' or data['dispatchCode'] == '311' or data['dispatchCode'] == '10-99' then
         TriggerClientEvent('erp-dispatch:setBlip', -1, data['dispatchCode'], vector3(data['origin']['x'], data['origin']['y'], data['origin']['z']), newId)
     end
 end)
@@ -33,7 +30,7 @@ AddEventHandler("dispatch:addUnit", function(callid, player, cb)
                 end
             end
         end
-	local callsign = exports['mdt']:GetCallsign(player.identifier)
+	local callsign = exports['erp_mdt']:GetCallsign(player.identifier)
         if player.job.name == 'police' then
             table.insert(calls[callid]['units'], { cid = player.identifier, fullname = player.name, job = 'Police', callsign = callsign[1].callsign	})
         elseif player.job.name == 'ambulance' then
@@ -99,17 +96,101 @@ AddEventHandler('erp-dispatch:armedperson', function(sentCoords)
     TriggerClientEvent('erp-dispatch:armedperson', -1, sentCoords)
 end)
 
+-- VANGELICOS
+RegisterNetEvent('rcrp-dispatch:servervangelicos')
+AddEventHandler('rcrp-dispatch:servervangelicos', function(sentCoords)
+    TriggerClientEvent('rcrp-dispatch:VangelicosBlip', -1, sentCoords)
+end)
+
+--Store Robberies
+RegisterNetEvent('rcrp-dispatch:serverStoreRobberies')
+AddEventHandler('rcrp-dispatch:serverStoreRobberies', function(sentCoords)
+    TriggerClientEvent('rcrp-dispatch:StoreRobberiesBlip', -1, sentCoords)
+end)
+
+--Bank Robbery
+RegisterNetEvent('rcrp-dispatch:ServerBankRobbery')
+AddEventHandler('rcrp-dispatch:ServerBankRobbery', function(sentCoords)
+    TriggerClientEvent('rcrp-dispatch:BankRobberyBlip', -1, sentCoords)
+end)
+
+--Car Thief
+RegisterNetEvent('rcrp-dispatch:ChopShopBlip')
+AddEventHandler('rcrp-dispatch:ChopShopBlip', function(sentCoords)
+    TriggerClientEvent('rcrp-dispatch:ChopShopBlip', -1, sentCoords)
+end)
+
+--SSDrugs
+RegisterNetEvent('rcrp-dispatch:DrugReportsBlip')
+AddEventHandler('rcrp-dispatch:DrugReportsBlip', function(sentCoords)
+    TriggerClientEvent('rcrp-dispatch:DrugReportBlip', -1, sentCoords)
+end)
+
+-- rcrp-dispatch:houserobbery
+RegisterNetEvent('rcrp-dispatch:houserobbery')
+AddEventHandler('rcrp-dispatch:houserobbery', function(sentCoords)
+    TriggerClientEvent('rcrp-dispatch:houserobberyblip', -1, sentCoords)
+end)
+
+
+
+
+
+
+
+--Custom Shit
+
+function getCaller(src)
+	local xPlayer = ESX.GetPlayerFromId(src)
+	return xPlayer.getName()
+end
+
+ESX.RegisterServerCallback('rcrp:getCharData', function(source, cb)
+	local xPlayer = ESX.GetPlayerFromId(source)
+	if not xPlayer then return end
+
+	local identifier = xPlayer.getIdentifier()
+	MySQL.Async.fetchAll('SELECT firstname, lastname, phone_number FROM users WHERE identifier = @identifier', {
+		['@identifier'] = identifier
+	}, function(results)
+		cb(results[1])
+	end)
+end)
+
+AddEventHandler('rcrp-playerdownalert', function(dispatchCode, firstStreet, gender, priority, origin, dispatchMessage, name, number, job, information)
+    local xPlayer = ESX.GetPlayerFromId(source)
+
+    TriggerEvent('dispatch:svNotify', {
+        dispatchCode = dispatchCode,
+        firstStreet = firstStreet,
+        gender = gender,
+        priority = priority,
+        origin = origin,
+        dispatchMessage = dispatchMessage,
+        name = getCaller(source),
+        number =  plyData['phone_number'],
+        job = {"police","ambulance"},
+        information = msg
+    })
+
+end)
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 RegisterNetEvent('erp-dispatch:vehiclecrash')
 AddEventHandler('erp-dispatch:vehiclecrash', function(sentCoords)
     TriggerClientEvent('erp-dispatch:vehiclecrash', -1, sentCoords)
-end)
-
--- erp-dispatch:houserobbery
-
-RegisterNetEvent('erp-dispatch:houserobbery')
-AddEventHandler('erp-dispatch:houserobbery', function(sentCoords)
-    TriggerClientEvent('erp-dispatch:houserobbery', -1, sentCoords)
 end)
 
 -- erp-dispatch:banktruck
@@ -126,17 +207,6 @@ AddEventHandler('erp-dispatch:art', function(sentCoords)
     TriggerClientEvent('erp-dispatch:art', -1, sentCoords)
 end)
 
--- erp-dispatch:jewel
-
-RegisterNetEvent('erp-dispatch:jewel')
-AddEventHandler('erp-dispatch:jewel', function(sentCoords)
-    TriggerClientEvent('erp-dispatch:jewel', -1, sentCoords)
-end)
-
-RegisterNetEvent('erp-dispatch:bankwobbewy')
-AddEventHandler('erp-dispatch:bankwobbewy', function(sentCoords)
-    TriggerClientEvent('erp-dispatch:bankwobbewy', -1, sentCoords)
-end)
 
 RegisterNetEvent('erp-dispatch:g6')
 AddEventHandler('erp-dispatch:g6', function(sentCoords)
@@ -202,3 +272,4 @@ RegisterNetEvent('erp-dispatch:emsalertB')
 AddEventHandler('erp-dispatch:emsalertB', function(sentCoords)
     TriggerClientEvent('erp-dispatch:emsalertB', -1, sentCoords)
 end)
+
